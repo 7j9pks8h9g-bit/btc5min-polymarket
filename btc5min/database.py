@@ -257,7 +257,6 @@ def init_db():
     """)
     conn.commit()
 
-    # Migrations for existing databases
     _run_migrations(conn)
     
     # Limpieza de inicio: Eliminar ventanas y apuestas "vivas" de una sesión anterior
