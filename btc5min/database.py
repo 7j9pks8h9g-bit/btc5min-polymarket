@@ -127,9 +127,12 @@ def _get_conn() -> sqlite3.Connection:
     return _local.conn
 
 
+
 def init_db():
-    """Create tables if they don't exist."""
+    """Create tables, run migrations, then create indexes."""
     conn = _get_conn()
+
+    # 1. Create tables first, without indexes.
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS price_ticks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,7 +164,6 @@ def init_db():
             risk_score TEXT,
             outcome TEXT,
             correct INTEGER,
-            -- TA snapshot at prediction time
             rsi REAL,
             macd_histogram REAL,
             bb_pct REAL,
@@ -218,27 +220,6 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
 
-        CREATE INDEX IF NOT EXISTS idx_predictions_window ON predictions(window_id);
-        CREATE INDEX IF NOT EXISTS idx_bets_window ON bets(window_id);
-        CREATE INDEX IF NOT EXISTS idx_price_ticks_ts ON price_ticks(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_market_context_window ON market_context(window_id);
-        CREATE INDEX IF NOT EXISTS idx_liquidations_ts ON liquidations(timestamp);
-
-        -- Performance indexes (megarefactor B3)
-        CREATE INDEX IF NOT EXISTS idx_predictions_ai_model ON predictions(ai_model);
-        CREATE INDEX IF NOT EXISTS idx_predictions_strategy ON predictions(strategy_name);
-        CREATE INDEX IF NOT EXISTS idx_predictions_quality ON predictions(signal_quality);
-        CREATE INDEX IF NOT EXISTS idx_predictions_created ON predictions(created_at);
-        CREATE INDEX IF NOT EXISTS idx_predictions_window_model ON predictions(window_id, ai_model);
-        CREATE INDEX IF NOT EXISTS idx_bets_ai_model ON bets(ai_model);
-        CREATE INDEX IF NOT EXISTS idx_bets_strategy ON bets(strategy_name);
-        CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at);
-        CREATE INDEX IF NOT EXISTS idx_bets_window_model ON bets(window_id, ai_model);
-        CREATE INDEX IF NOT EXISTS idx_bets_ghost ON bets(is_ghost);
-        CREATE INDEX IF NOT EXISTS idx_bets_shadow ON bets(is_shadow);
-        CREATE INDEX IF NOT EXISTS idx_windows_outcome ON windows(outcome);
-
-        -- Multi-Agent Swarm: independent portfolios per AI agent
         CREATE TABLE IF NOT EXISTS agent_portfolios (
             agent_id TEXT PRIMARY KEY,
             display_name TEXT NOT NULL DEFAULT '',
@@ -256,6 +237,62 @@ def init_db():
         );
     """)
     conn.commit()
+
+    # 2. Add missing columns before creating indexes.
+    _run_migrations(conn)
+
+    # 3. Create indexes after migrations.
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_predictions_window
+            ON predictions(window_id);
+        CREATE INDEX IF NOT EXISTS idx_bets_window
+            ON bets(window_id);
+        CREATE INDEX IF NOT EXISTS idx_price_ticks_ts
+            ON price_ticks(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_market_context_window
+            ON market_context(window_id);
+        CREATE INDEX IF NOT EXISTS idx_liquidations_ts
+            ON liquidations(timestamp);
+
+        CREATE INDEX IF NOT EXISTS idx_predictions_ai_model
+            ON predictions(ai_model);
+        CREATE INDEX IF NOT EXISTS idx_predictions_strategy
+            ON predictions(strategy_name);
+        CREATE INDEX IF NOT EXISTS idx_predictions_quality
+            ON predictions(signal_quality);
+        CREATE INDEX IF NOT EXISTS idx_predictions_created
+            ON predictions(created_at);
+        CREATE INDEX IF NOT EXISTS idx_predictions_window_model
+            ON predictions(window_id, ai_model);
+
+        CREATE INDEX IF NOT EXISTS idx_bets_ai_model
+            ON bets(ai_model);
+        CREATE INDEX IF NOT EXISTS idx_bets_strategy
+            ON bets(strategy_name);
+        CREATE INDEX IF NOT EXISTS idx_bets_created
+            ON bets(created_at);
+        CREATE INDEX IF NOT EXISTS idx_bets_window_model
+            ON bets(window_id, ai_model);
+        CREATE INDEX IF NOT EXISTS idx_bets_ghost
+            ON bets(is_ghost);
+        CREATE INDEX IF NOT EXISTS idx_bets_shadow
+            ON bets(is_shadow);
+
+        CREATE INDEX IF NOT EXISTS idx_windows_outcome
+            ON windows(outcome);
+    """)
+    conn.commit()
+
+    # 4. Clean up unfinished records.
+    conn.executescript("""
+        DELETE FROM bets WHERE outcome IS NULL;
+        DELETE FROM predictions WHERE outcome IS NULL;
+        DELETE FROM windows WHERE outcome IS NULL;
+    """)
+    conn.commit()
+
+    log.info(f"Database initialized: {DB_PATH}")
+
 
     _run_migrations(conn)
     
