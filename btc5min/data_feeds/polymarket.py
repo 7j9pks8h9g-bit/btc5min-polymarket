@@ -282,7 +282,7 @@ class PolymarketClient:
             "User-Agent": "btc5min-paper-trader/1.0",
         })
         self.live = PolymarketLiveStream()
-        self.live.start()
+        # self.live.start()
 
     def get_current_btc5min_quote(self) -> PolymarketQuote:
         """
