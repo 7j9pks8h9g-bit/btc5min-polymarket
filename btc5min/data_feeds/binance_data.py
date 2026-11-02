@@ -29,7 +29,7 @@ _DEPTH_URL = "https://api.binance.com/api/v3/depth"
 _LIQUIDATION_WS_URL = "wss://fstream.binance.com/ws/btcusdt@forceOrder"
 
 # Binance Spot WebSocket for aggTrade (Order Flow / CVD)
-_AGGTRADE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@aggTrade"
+_AGGTRADE_WS_URL = "wss://data-stream.binance.vision/ws/btcusdt@aggTrade"
 
 
 class BinanceMarketData:
