@@ -18,7 +18,7 @@ POLYMARKET_WS_URL = "wss://ws-live-data.polymarket.com"
 LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL", "http://localhost:1234/v1")
 
 # ── Binance Data ───────────────────────────────────────────
-BINANCE_WS_URL = "wss://stream.binance.com:9443/ws/btcusdt@trade"
+BINANCE_WS_URL = "wss://data-stream.binance.vision/ws/btcusdt@trade"
 # ── Trading Parameters ──────────────────────────────────────
 WINDOW_MINUTES = 5
 MAX_BET_PCT = 0.05
