@@ -55,10 +55,9 @@ class BinanceMarketData:
         self._agg_lock = threading.Lock()
         self._agg_connected = False
         # Rolling CVD accumulator per 5-min window (keyed by window_start_ts)
-        self._cvd_window_start: float = 0
-        self._cvd_buy_vol: float = 0
-        self._cvd_sell_vol: float = 0
-
+        self._cvd_window_start = 0
+        self._cvd_buy_vol = 0.0
+        self._cvd_sell_vol = 0.0
     def start(self):
         """Start background refresh + liquidation stream + aggTrade stream threads."""
         self._running = True
@@ -490,12 +489,22 @@ class BinanceMarketData:
             }
 
             with self._agg_lock:
-                self._agg_trades.append(trade)
-                # Accumulate into current CVD window
-                if side == "BUY":
-                    self._cvd_buy_vol += usd_value
-                else:
-                    self._cvd_sell_vol += usd_value
+    self._agg_trades.append(trade)
+
+    # Align to exact UTC 5-minute boundaries
+    window_start = int(ts // 300) * 300
+
+    if window_start > self._cvd_window_start:
+        self._cvd_window_start = window_start
+        self._cvd_buy_vol = 0.0
+        self._cvd_sell_vol = 0.0
+
+    # Ignore delayed trades from previous windows
+    if window_start == self._cvd_window_start:
+        if side == "BUY":
+            self._cvd_buy_vol += usd_value
+        else:
+            self._cvd_sell_vol += usd_value
 
         except Exception as e:
             log.debug(f"aggTrade parse error: {e}")
@@ -618,15 +627,19 @@ class BinanceMarketData:
             return dict(self._cache)
 
     def get_status(self) -> dict:
-        with self._lock:
-            age = time.time() - self._last_fetch if self._last_fetch else 999
-            return {
-                "has_data": bool(self._cache),
-                "last_fetch_age": round(age, 1),
-                "funding_rate": self._cache.get("funding_rate"),
-                "open_interest": self._cache.get("open_interest"),
-                "klines_15m": bool(self._klines_cache.get("15m")),
-                "klines_1h": bool(self._klines_cache.get("1h")),
-                "liq_connected": self._liq_connected,
-                "agg_connected": self._agg_connected,
-            }
+    with self._lock:
+        age = time.time() - self._last_fetch if self._last_fetch else 999
+
+        fresh_limit = max(self._refresh_interval * 2, 30)
+
+        return {
+            "has_data": bool(self._cache),
+            "last_fetch_age": round(age, 1),
+            "data_fresh": bool(self._cache) and age <= fresh_limit,
+            "funding_rate": self._cache.get("funding_rate"),
+            "open_interest": self._cache.get("open_interest"),
+            "klines_15m": bool(self._klines_cache.get("15m")),
+            "klines_1h": bool(self._klines_cache.get("1h")),
+            "liq_connected": self._liq_connected,
+            "agg_connected": self._agg_connected,
+        }
